@@ -5,8 +5,8 @@ package provider
 
 import (
 	"context"
-	"net/http"
 
+    "terraform-provider-engineering-bootcamp/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/action"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/ephemeral"
@@ -24,6 +24,7 @@ var _ provider.ProviderWithEphemeralResources = &ScaffoldingProvider{}
 var _ provider.ProviderWithActions = &ScaffoldingProvider{}
 
 // ScaffoldingProvider defines the provider implementation.
+//the struct for the provider with defined methods(5 metadata,etc.) below
 type ScaffoldingProvider struct {
 	// version is set to the provider version on release, "dev" when the
 	// provider is built and ran locally, and "test" when running acceptance
@@ -32,20 +33,22 @@ type ScaffoldingProvider struct {
 }
 
 // ScaffoldingProviderModel describes the provider data model.
+//changed to host could be anything. Go side schema. the model
+//Was endpoint was better but oh well.
 type ScaffoldingProviderModel struct {
-	Endpoint types.String `tfsdk:"endpoint"`
+	Host types.String `tfsdk:"host"`
 }
 
 func (p *ScaffoldingProvider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
-	resp.TypeName = "scaffolding"
+    resp.TypeName = "engineering-bootcamp" // changed: was "scaffolding". This is the prefix for resource names
 	resp.Version = p.version
 }
 
 func (p *ScaffoldingProvider) Schema(ctx context.Context, req provider.SchemaRequest, resp *provider.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
-			"endpoint": schema.StringAttribute{
-				MarkdownDescription: "Example provider attribute",
+			"host": schema.StringAttribute{ //change to host
+				MarkdownDescription: "URL of the DevOps API. Defaults to http://localhost:8080",
 				Optional:            true,
 			},
 		},
@@ -61,13 +64,26 @@ func (p *ScaffoldingProvider) Configure(ctx context.Context, req provider.Config
 		return
 	}
 
-	// Configuration values are now available.
-	// if data.Endpoint.IsNull() { /* ... */ }
+	// removed: the "Configuration values are now available" comment block
 
-	// Example client configuration for data sources and resources
-	client := http.DefaultClient
-	resp.DataSourceData = client
-	resp.ResourceData = client
+	// added: turn the Terraform string into a plain Go string (nil if host wasn't set)
+	var host *string
+	if !data.Host.IsNull() && !data.Host.IsUnknown() {
+		h := data.Host.ValueString()
+		host = &h
+	}
+
+	// changed: was "client := http.DefaultClient"
+	// now we build OUR client from internal/client/client.go
+	c, err := client.NewClient(host)
+	if err != nil {
+		// added: show the error to the user if the client can't be built
+		resp.Diagnostics.AddError("Unable to create DevOps API client", err.Error())
+		return
+	}
+
+	resp.DataSourceData = c // changed: was the http client, now our client
+	resp.ResourceData = c   // changed: was the http client, now our client
 }
 
 func (p *ScaffoldingProvider) Resources(ctx context.Context) []func() resource.Resource {
